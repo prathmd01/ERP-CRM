@@ -1,173 +1,255 @@
 # Mini ERP + CRM Operations Portal
 
-## 1. Project Overview
+Full-stack operations portal built for the **Parul University Full Stack Developer Case Study — Round 1**. It brings customer CRM, product master data, an auditable stock ledger, and sales-challan operations into one role-protected application.
 
-This portal supports the day-to-day customer, product, warehouse, and sales-challan work of a wholesale or distribution business. It keeps customer follow-ups, product stock, inventory movements, and sales challans in one role-controlled application.
+**Live application:** https://erp-crm-ochre.vercel.app
 
-## 2. Features
+**Production API:** https://erp-crm-api1.vercel.app/api
+**Repository:** https://github.com/prathmd01/ERP-CRM
 
-- JWT login with bcrypt password verification and four seeded roles.
-- Customer CRM: create, search, filter, view, update follow-up dates, status, and notes.
-- Product master: create, search, filter, and update product metadata.
-- Inventory: current-stock list, low-stock indication/filter, manual IN/OUT movements, and movement history for warehouse-authorized users.
-- Sales challans: create DRAFT challans with multiple items, view details, confirm, and cancel.
-- Dashboard API and UI with customer/product/challan counts, recent challans, and low-stock products.
-- Protected React routes, role-aware navigation, loading, empty, error, and submit-feedback states.
+## Contents
 
-## 3. Tech Stack
+- [Features](#features)
+- [Architecture](#architecture)
+- [Technology](#technology)
+- [Roles and permissions](#roles-and-permissions)
+- [Business modules](#business-modules)
+- [Core business rules](#core-business-rules)
+- [API reference](#api-reference)
+- [Validation and error handling](#validation-and-error-handling)
+- [Database design](#database-design)
+- [Local setup](#local-setup)
+- [Demo access](#demo-access)
+- [Testing](#testing)
+- [Deployment](#deployment)
+- [Assumptions and limitations](#assumptions-and-limitations)
 
-**Frontend:** React, TypeScript, Vite, Tailwind CSS, Axios, React Router.
+## Features
 
-**Backend:** Node.js, TypeScript, Express, Prisma, PostgreSQL, JWT (`jsonwebtoken`), bcrypt (`bcryptjs`), and Zod validation.
+- JWT login with bcrypt password verification and backend role-based authorization.
+- Customer CRM with customer type, lifecycle status, follow-up date, notes, search, filters, pagination, detail view, create, update, and delete operations.
+- Product master with SKU uniqueness, category filtering, low-stock status, pagination, and metadata maintenance.
+- Inventory current-stock view plus an `IN`/`OUT` movement ledger recording reason, operator, and timestamp.
+- Sales challans with multiple item lines, immutable product snapshots, DRAFT/CONFIRMED/CANCELLED states, and stock-safe confirmation.
+- Dashboard totals, five recent challans, and five lowest-stock products.
+- Responsive React UI with protected routes, role-aware navigation/actions, loading, empty, and error states.
 
-## 4. Architecture
-
-```text
-React frontend
-  -> REST API (/api)
-  -> Express routes, middleware, controllers, and services
-  -> Prisma Client
-  -> PostgreSQL
-```
-
-The frontend uses Axios to attach the JWT from local storage. Express authenticates the token and authorizes the route role before controllers call services. Services contain database and business logic; Prisma accesses PostgreSQL.
-
-## 5. Folder Structure
-
-```text
-.
-├── client/
-│   ├── src/
-│   │   ├── components/       # Protected route component
-│   │   ├── context/          # Authentication context
-│   │   ├── layouts/          # Dashboard layout/navigation
-│   │   ├── pages/            # Login, dashboard, CRM, product, inventory, challan pages
-│   │   ├── services/         # Axios API client
-│   │   └── types/            # Frontend types
-│   ├── .env.example
-│   └── package.json
-└── server/
-    ├── prisma/
-    │   ├── migrations/
-    │   ├── schema.prisma
-    │   └── seed.ts
-    ├── src/
-    │   ├── controllers/
-    │   ├── lib/              # Prisma client
-    │   ├── middleware/       # Auth, validation, error handling
-    │   ├── routes/
-    │   ├── services/
-    │   ├── utils/
-    │   └── validators/
-    ├── .env.example
-    └── package.json
-```
-
-## 6. Database Design
-
-- `User`: name, unique email, password hash, and `Role`; creates challans and stock movements.
-- `Customer`: CRM contact/business details, type, status, follow-up date, notes, and related challans.
-- `Product`: unique SKU, category, price, current/minimum stock, warehouse, related movements, and challan items.
-- `StockMovement`: an IN or OUT quantity, reason, timestamp, product, and creating user.
-- `Challan`: unique challan number, customer, creator, total quantity, and DRAFT/CONFIRMED/CANCELLED status.
-- `ChallanItem`: product reference plus immutable product-name, SKU, and unit-price snapshots and quantity. Challan items cascade when their challan is deleted.
-
-## 7. Authentication & RBAC
-
-`POST /api/auth/login` verifies a bcrypt password hash and returns a signed JWT containing the user ID and role. Authenticated frontend requests send `Authorization: Bearer <token>`.
-
-Authentication establishes who the user is. Authorization checks whether that authenticated user has the role required by a route.
-
-- `ADMIN`: all implemented operations.
-- `SALES`: customer CRM write access and challan creation/confirmation/cancellation; read access to products and inventory stock.
-- `WAREHOUSE`: product write access and stock-movement access; read access to products and inventory stock.
-- `ACCOUNTS`: read access to customers, products, inventory stock, challans, and dashboard.
-
-## 8. Customer CRM
-
-Customers support contact and business details, optional GST number, RETAIL/WHOLESALE/DISTRIBUTOR type, LEAD/ACTIVE/INACTIVE status, follow-up date, and notes. The UI supports search, type/status filters, pagination, create, detail view, and CRM follow-up/status/note updates.
-
-## 9. Product & Inventory
-
-Products have SKU, category, unit price, current stock, minimum stock, and warehouse. Current stock at or below minimum stock is returned as low stock. New products with a non-zero initial stock create an `IN` movement named `Initial stock balance`; later stock changes use the movement endpoint, rather than direct product editing. Movement records include product, quantity, IN/OUT type, reason, creator, and timestamp.
-
-## 10. Sales Challan Workflow
+## Architecture
 
 ```text
-DRAFT
-  -> validate customer and product items
-  -> on confirmation: check all required stock
-  -> atomically deduct stock
-  -> create OUT movement(s)
-  -> CONFIRMED
+React + TypeScript + Vite
+        │ Axios (Bearer token)
+        ▼
+Express REST API (/api)
+        │ authentication → authorization → validation
+        ▼
+Controllers → services → Prisma Client
+        ▼
+PostgreSQL (Neon in production)
 ```
 
-Creating a challan saves a DRAFT and does not affect stock. Only DRAFT challans can be confirmed or cancelled. A cancelled or confirmed challan cannot change state again.
+The frontend keeps the login token and user in browser `localStorage`; Axios attaches `Authorization: Bearer <token>` to requests. Express authenticates the JWT and authorizes the caller before a controller delegates to a service. Services own query, inventory, and challan business logic; Prisma persists to PostgreSQL.
 
-## 11. Important Business Logic
+## Technology
 
-- Confirmation aggregates quantities for repeated products on one challan.
-- Each stock deduction uses a conditional atomic decrement inside a Prisma transaction. If an item cannot be fulfilled, the transaction fails and no partial stock updates or movements are committed.
-- Stock cannot become negative; insufficient stock returns a validation error.
-- Confirmation creates OUT stock movements with the challan number in the reason.
-- Product name, SKU, and unit price are captured when a challan item is created and are not overwritten at confirmation.
+| Area | Implementation |
+| --- | --- |
+| Frontend | React 18, TypeScript, Vite, React Router, Axios, Tailwind CSS |
+| Backend | Node.js, Express, TypeScript |
+| Data | PostgreSQL, Prisma ORM, Prisma migration and seed script |
+| Security | `bcryptjs`, `jsonwebtoken`, CORS, backend RBAC |
+| Validation | Zod request schemas |
+| Tests | Node test runner via `tsx`, Prisma service mocks |
+| Hosting | Vercel frontend and backend; Neon PostgreSQL |
 
-## 12. API Documentation
+## Roles and permissions
 
-All responses use `{ success, data? , message? }`. All routes except login and health require a bearer token.
+Authentication answers **“Who are you?”**: the login endpoint verifies the password and supplies a signed token. Authorization answers **“What are you allowed to do?”**: protected backend routes check the JWT role. Hiding a frontend button improves usability, but the backend middleware is the security boundary.
+
+| Module / action | ADMIN | SALES | WAREHOUSE | ACCOUNTS |
+| --- | --- | --- | --- | --- |
+| Dashboard | Read | Read | Read | Read |
+| Customers: list/detail | Read | Read | — | Read |
+| Customers: create/update/delete | Write | Write | — | — |
+| Products: list/detail | Read | Read | Read | Read |
+| Products: create/update | Write | — | Write | — |
+| Inventory: current stock | Read | Read | Read | Read |
+| Inventory: movement history / adjustment | Write | — | Write | — |
+| Challans: list/detail | Read | Read | — | Read |
+| Challans: create/confirm/cancel | Write | Write | — | — |
+
+The matrix is derived from route authorization middleware, rather than UI visibility.
+
+### Authentication flow
+
+1. `POST /api/auth/login` validates an email and non-empty password.
+2. The backend fetches the user by email and uses `bcrypt.compare()` against `passwordHash`.
+3. On success it signs a JWT that contains `userId` and `role`, with a 24-hour expiry, and returns the token plus non-sensitive user fields.
+4. The Axios request interceptor sends the token as a bearer token. `authenticate` verifies it for protected routes; `authorize` checks the route’s allowed roles.
+5. Missing, invalid, or expired tokens return `401`. A valid token without the required role returns `403`.
+
+The frontend restores a stored session at startup, redirects unauthenticated visitors to `/login`, and clears stored credentials/redirects to login after an API `401`.
+
+## Business modules
+
+### Customer CRM
+
+`Customer` stores `name`, `mobile`, `email`, `businessName`, optional `gstNumber`, `customerType`, `address`, `status`, optional `followUpDate`, `notes`, and timestamps. Types are `RETAIL`, `WHOLESALE`, or `DISTRIBUTOR`; statuses are `LEAD`, `ACTIVE`, or `INACTIVE`.
+
+- Customer listing searches name, mobile, or business name case-insensitively and filters by status and type.
+- Detail retrieval includes up to ten most recent challans and their items.
+- Sales and administrators create, update, and delete customers. Updating the follow-up date accepts an ISO date-time or `null`; notes default to an empty string on creation.
+
+### Products
+
+`Product` stores `name`, unique `sku`, `category`, decimal `unitPrice`, `currentStock`, `minimumStock`, `warehouse`, and timestamps.
+
+- Listing searches name, SKU, or category case-insensitively; it can filter to products where `currentStock <= minimumStock` and returns `isLowStock`.
+- Sales, warehouse, accounts, and administrators can read products. Only warehouse and administrators can create or update product metadata.
+- Product updates deliberately exclude `currentStock`; stock changes use the inventory movement endpoint so each normal adjustment has a ledger entry.
+- Creating a product with positive initial stock runs in a transaction and creates an `IN` movement with reason `Initial stock balance`.
+
+### Inventory
+
+Current inventory is the product list, including current stock, minimum stock, warehouse, and low-stock status. The separate movement ledger records product, positive quantity, `IN` or `OUT` type, reason, creating user, and timestamp.
+
+- Warehouse and administrators can view the ledger and post manual movements.
+- An `IN` movement adds its quantity. An `OUT` movement subtracts it only if the resulting stock is not negative; the product update and movement creation occur in one Prisma transaction.
+- Ledger history can filter by `productId`. Current inventory supports search across name, SKU, and category plus `lowStock=true`; its validated query parameters do not include a standalone category filter.
+
+### Sales challans
+
+A challan is created for one customer with one or more product/quantity lines. It contains a generated `CH-YYYYMMDD-NNNN` number, total quantity, creator, timestamps, and a status of `DRAFT`, `CONFIRMED`, or `CANCELLED`.
+
+When created, each `ChallanItem` snapshots the product name, SKU, and unit price. These snapshot values remain on the item even if product master data changes later. Creating a draft does **not** change inventory.
+
+```text
+Create (DRAFT)
+  → confirm
+  → aggregate repeated product lines
+  → validate all stock requirements
+  → guarded stock decrements + OUT movements (one transaction)
+  → CONFIRMED
+```
+
+Confirmation reads the draft in a Prisma transaction, rejects non-draft states, totals quantities for duplicate product lines, checks every product’s available stock, then performs a conditional `updateMany` decrement (`currentStock >= required quantity`) for each product. It creates a corresponding `OUT` movement with the challan number in its reason, then marks the challan confirmed. The final conditional decrement guards against concurrent confirmation races; transaction failure rolls back all related changes.
+
+Cancellation is only valid for a DRAFT challan and changes its status to `CANCELLED`; it does not reverse inventory because a draft has not deducted it.
+
+### Dashboard and UI
+
+`GET /api/dashboard` returns total customer/product/challan counts, low-stock count, the five most recent challans, and up to five low-stock products ordered by current stock ascending. Every role can view the dashboard. The React app also provides role-aware navigation and protected client routes, while the server continues to enforce permission checks.
+
+## Core business rules
+
+1. Stock values cannot become negative through manual `OUT` movements or challan confirmation.
+2. A new challan is always a DRAFT and does not alter stock.
+3. Only DRAFT challans can be confirmed or cancelled; confirmed and cancelled challans cannot transition again.
+4. Confirming a challan validates customer/products at creation time and validates all aggregated stock requirements at confirmation time.
+5. Insufficient stock fails confirmation before any stock decrement. The confirmation transaction prevents partial stock/movement commits.
+6. Successful confirmation decrements stock and writes `OUT` ledger movements in the same transaction.
+7. Repeated lines for the same product are aggregated before confirmation, preventing separate deductions from bypassing the combined stock requirement.
+8. Product name, SKU, and price are captured per challan item when the draft is created.
+9. Positive initial stock at product creation produces an auditable `IN` movement.
+
+## API reference
+
+Base URL: `https://erp-crm-api1.vercel.app/api`
+
+Local base URL: `http://localhost:5000/api`
+
+Successful API responses use `{ "success": true, "data": ... }`; errors use `{ "success": false, "message": "..." }`. All routes except health and login require `Authorization: Bearer <token>`.
+
+| Method | Route | Access | Purpose and key inputs |
+| --- | --- | --- | --- |
+| GET | `/health` | Public | API health check. |
+| POST | `/auth/login` | Public | Body: `email`, `password`; returns JWT and user. |
+| GET | `/customers` | ADMIN, SALES, ACCOUNTS | `page`, `limit`, `search`, `status`, `customerType`. |
+| GET | `/customers/:id` | ADMIN, SALES, ACCOUNTS | Customer plus up to ten recent challans. |
+| POST | `/customers` | ADMIN, SALES | Create a customer. |
+| PUT | `/customers/:id` | ADMIN, SALES | Update any validated customer fields. |
+| DELETE | `/customers/:id` | ADMIN, SALES | Delete a customer. |
+| GET | `/products` | All roles | `page`, `limit`, `search`, `category`, `lowStock=true`. |
+| GET | `/products/:id` | All roles | Product plus calculated low-stock flag. |
+| POST | `/products` | ADMIN, WAREHOUSE | Create product; positive initial stock creates an `IN` movement. |
+| PUT | `/products/:id` | ADMIN, WAREHOUSE | Update metadata; current stock is not accepted. |
+| GET | `/inventory` | All roles | Current-stock listing; `page`, `limit`, `search`, `lowStock=true`. |
+| GET | `/inventory/movements` | ADMIN, WAREHOUSE | `page`, `limit`, optional `productId`. |
+| POST | `/inventory/movements` | ADMIN, WAREHOUSE | Body: `productId`, positive `quantity`, `movementType`, `reason`. |
+| GET | `/challans` | ADMIN, SALES, ACCOUNTS | `page`, `limit`, `status`, `search`. |
+| GET | `/challans/:id` | ADMIN, SALES, ACCOUNTS | Challan, customer, creator, items, and snapshots. |
+| POST | `/challans` | ADMIN, SALES | Body: `customerId`, `items: [{ productId, quantity }]`; creates DRAFT. |
+| POST | `/challans/:id/confirm` | ADMIN, SALES | Confirms DRAFT, deducts stock, and records movements. |
+| POST | `/challans/:id/cancel` | ADMIN, SALES | Cancels DRAFT. |
+| GET | `/dashboard` | All roles | Operational counts, recent challans, low-stock products. |
+
+### Request bodies
+
+Customer creation requires `name`, `mobile` (at least 10 characters), `email`, `businessName`, `customerType`, and `address`; optional fields are `gstNumber`, `status`, ISO `followUpDate`, and `notes`.
+
+Product creation requires `name`, `sku`, `category`, positive numeric `unitPrice`, and `warehouse`; `currentStock` and `minimumStock` are optional non-negative integers. Challan items require a product ID and positive integer quantity.
+
+### Pagination, search, and filters
+
+All paginated list endpoints return `items`, `total`, `page`, `limit`, and `totalPages`. Defaults are `page=1` and `limit=10`; limit is constrained to 1–100.
+
+| Resource | Search | Filters |
+| --- | --- | --- |
+| Customers | name, mobile, business name | `status`, `customerType` |
+| Products | name, SKU, category | `category`, `lowStock=true` |
+| Inventory | name, SKU, category | `lowStock=true` |
+| Stock movements | — | `productId` |
+| Challans | challan number, customer name | `status` |
 
 ### Postman collection
 
-Import [`postman/Fundsroom-ERP.postman_collection.json`](postman/Fundsroom-ERP.postman_collection.json) into Postman. Set `baseUrl` if the API is not running at `http://localhost:5000/api`, then run **Auth → Login** to populate the collection `token` variable. Set `customerId`, `productId`, and `challanId` from list/create responses before using ID-based requests. Use an ADMIN account for the full collection, or a role permitted by the endpoint.
+Import [`postman/Fundsroom-ERP.postman_collection.json`](postman/Fundsroom-ERP.postman_collection.json) into Postman. Set its `baseUrl` variable to the production or local base URL, run **Auth → Login** to populate `token`, then supply `customerId`, `productId`, and `challanId` from API responses for ID-based calls. The collection uses the ADMIN demo account by default.
 
-| Method | Route | Auth / roles | Body | Purpose |
-| --- | --- | --- | --- | --- |
-| GET | `/api/health` | Public | — | API health response. |
-| POST | `/api/auth/login` | Public | `{ "email", "password" }` | Authenticate and return JWT/user. |
-| GET | `/api/customers` | ADMIN, SALES, ACCOUNTS | — | Paginated customers; supports `page`, `limit`, `search`, `status`, `customerType`. |
-| GET | `/api/customers/:id` | ADMIN, SALES, ACCOUNTS | — | Customer and up to 10 recent challans. |
-| POST | `/api/customers` | ADMIN, SALES | customer fields | Create a customer. |
-| PUT | `/api/customers/:id` | ADMIN, SALES | Any customer fields | Update a customer. |
-| DELETE | `/api/customers/:id` | ADMIN, SALES | — | Delete a customer. |
-| GET | `/api/products` | All roles | — | Paginated products; supports `page`, `limit`, `search`, `category`, `lowStock=true`. |
-| GET | `/api/products/:id` | All roles | — | Product with calculated low-stock flag. |
-| POST | `/api/products` | ADMIN, WAREHOUSE | `{ "name", "sku", "category", "unitPrice", "currentStock?", "minimumStock?", "warehouse" }` | Create a product; initial positive stock produces an IN movement. |
-| PUT | `/api/products/:id` | ADMIN, WAREHOUSE | Product metadata excluding `currentStock` | Update product metadata. |
-| GET | `/api/inventory` | All roles | — | Paginated inventory stock; supports `page`, `limit`, `search`, `lowStock=true`. |
-| GET | `/api/inventory/movements` | ADMIN, WAREHOUSE | — | Paginated movement history; supports `page`, `limit`, `productId`. |
-| POST | `/api/inventory/movements` | ADMIN, WAREHOUSE | `{ "productId", "quantity", "movementType": "IN"\|"OUT", "reason" }` | Post a stock movement. |
-| GET | `/api/challans` | ADMIN, SALES, ACCOUNTS | — | Paginated challans; supports `page`, `limit`, `status`, `search`. |
-| GET | `/api/challans/:id` | ADMIN, SALES, ACCOUNTS | — | Challan, customer, creator, items, and snapshots. |
-| POST | `/api/challans` | ADMIN, SALES | `{ "customerId", "items": [{ "productId", "quantity" }] }` | Create a DRAFT challan. |
-| POST | `/api/challans/:id/confirm` | ADMIN, SALES | — | Confirm a DRAFT, deduct stock, and create OUT movements. |
-| POST | `/api/challans/:id/cancel` | ADMIN, SALES | — | Cancel a DRAFT challan. |
-| GET | `/api/dashboard` | All roles | — | Counts, recent challans, and low-stock products. |
+## Validation and error handling
 
-Customer create fields are `name`, `mobile`, `email`, `businessName`, `customerType`, and `address`; optional fields are `gstNumber`, `status`, `followUpDate` (ISO date-time), and `notes`.
+Zod schemas validate login, customer create/update, product create/update, stock movements, challan creation, and supported list query parameters before controllers invoke services.
 
-## 13. Environment Variables
-
-Copy each example file to `.env`; never commit real credentials.
-
-**`server/.env`**
-
-```dotenv
-DATABASE_URL=postgresql://postgres:password@localhost:5432/erp_db
-JWT_SECRET=your-super-secret-jwt-key-change-in-production
-PORT=5000
-CLIENT_URL=http://localhost:5173
-NODE_ENV=development
+```text
+Request → route middleware validation → controller → service → Prisma/PostgreSQL
 ```
 
-**`client/.env`**
+The central error middleware formats:
 
-```dotenv
-VITE_API_URL=http://localhost:5000/api
+- Zod validation failures as `400` with field-oriented messages.
+- Missing/invalid/expired authentication as `401`.
+- Insufficient permissions as `403`.
+- Explicit missing resources as `404`.
+- Business-rule failures, including insufficient stock and invalid challan states, as `400`.
+- Prisma duplicate-key errors as `409` and missing-record errors as `404`.
+- Invalid JSON as `400`; unhandled errors as `500` (generic message in production).
+
+## Database design
+
+The Prisma schema uses PostgreSQL enums for roles, customer type/status, movement type, and challan state. Unique constraints protect user email, product SKU, and challan number. Indexes support common lookups such as customer identifiers/status, product fields, stock-movement foreign keys/time, and challan number/customer/status/time.
+
+```mermaid
+erDiagram
+    USER ||--o{ STOCK_MOVEMENT : creates
+    USER ||--o{ CHALLAN : creates
+    CUSTOMER ||--o{ CHALLAN : receives
+    CHALLAN ||--o{ CHALLAN_ITEM : contains
+    PRODUCT ||--o{ CHALLAN_ITEM : referenced_by
+    PRODUCT ||--o{ STOCK_MOVEMENT : has
 ```
 
-## 14. Local Setup
+- `User` owns authentication data and has one of four roles.
+- `Customer` is related to its sales challans.
+- `Product.currentStock` is the current balance; `StockMovement` provides the operational movement record.
+- `ChallanItem` references a product while persisting name, SKU, and price snapshots. Items cascade when their parent challan is deleted; other relations are restricted by database foreign keys.
 
-Prerequisites: Node.js, npm, and a running PostgreSQL server.
+## Local setup
+
+### Prerequisites
+
+- Node.js and npm
+- PostgreSQL database
+
+### Configure and install
 
 ```bash
 cd server
@@ -179,32 +261,50 @@ npm install
 copy .env.example .env
 ```
 
-On macOS/Linux, use `cp .env.example .env` instead of `copy`.
+On macOS/Linux, use `cp .env.example .env`.
 
-## 15. Database Setup
+`server/.env`:
 
-Set `DATABASE_URL` in `server/.env`, then run:
+```dotenv
+DATABASE_URL=postgresql://postgres:password@localhost:5432/erp_db
+JWT_SECRET=replace-with-a-strong-secret
+PORT=5000
+CLIENT_URL=http://localhost:5173
+NODE_ENV=development
+```
+
+`client/.env`:
+
+```dotenv
+VITE_API_URL=http://localhost:5000/api
+```
+
+Never commit production database URLs or JWT secrets.
+
+### Database and application commands
 
 ```bash
 cd server
 npm run db:generate
 npm run db:migrate
+npm run db:seed
+npm run dev
 ```
 
-`npm run db:push` is also available for schema synchronization, but migration-based setup is the reproducible path. `npm run db:studio` opens Prisma Studio.
-
-## 16. Seed Data
+In a second terminal:
 
 ```bash
-cd server
-npm run db:seed
+cd client
+npm run dev
 ```
 
-The seed script deletes existing challan items, challans, movements, products, customers, and users before recreating demo data. Do not run it against production data.
+Vite serves locally on port 5173 and proxies `/api` to port 5000. `npm run db:push`, `npm run db:studio`, `npm run build`, and `npm start` are also available in the relevant package.
 
-## 17. Demo Credentials
+> Warning: the seed script deletes existing challan items, challans, stock movements, products, customers, and users before creating its demo dataset. Do not run it against production data.
 
-All seeded accounts use password `Demo@123`.
+## Demo access
+
+All seeded users use the intentionally provided demo password `Demo@123`.
 
 | Role | Email |
 | --- | --- |
@@ -213,48 +313,32 @@ All seeded accounts use password `Demo@123`.
 | WAREHOUSE | `warehouse@erp.demo` |
 | ACCOUNTS | `accounts@erp.demo` |
 
-## 18. Frontend Run
+## Testing
 
-```bash
-cd client
-npm run dev
-```
-
-The Vite development server uses port 5173 and proxies `/api` to port 5000. Build the frontend with `npm run build`.
-
-## 19. Backend Run
+Run the focused backend suite:
 
 ```bash
 cd server
-npm run dev
+npm test
 ```
 
-For a production-style local run:
+The tests use Node’s built-in test runner through `tsx` and mocked Prisma service calls, so they do not write to the development database. They cover successful/failed login, auth and authorization rejection, initial-stock movement creation, draft behavior and snapshots, confirmation stock deduction and `OUT` movement creation, insufficient-stock prevention before updates, and invalid confirmation states.
 
-```bash
-npm run build
-npm start
-```
+## Deployment
 
-## 20. Deployment
+The confirmed production deployment uses Vercel for the frontend (`erp-crm`) and backend (`erp-crm-api1`), with Neon PostgreSQL. The production branch is `main`.
 
-Deployment has not been performed. The repository includes separate frontend/backend build scripts, environment examples, a Prisma migration, configurable CORS origin (`CLIENT_URL`), backend `PORT`, and frontend API base URL (`VITE_API_URL`). A deployment must provide PostgreSQL, set production secrets/environment values, run migrations, build both applications, and serve the frontend from a configured host.
+- Frontend: https://erp-crm-ochre.vercel.app
+- Backend health check: https://erp-crm-api1.vercel.app/api/health
+- API base URL: https://erp-crm-api1.vercel.app/api
 
-## 21. Testing
+Production configuration must supply `DATABASE_URL`, `JWT_SECRET`, `CLIENT_URL`, `NODE_ENV`, and the frontend `VITE_API_URL` without exposing their real secret values. No Vercel configuration file is tracked in this repository.
 
-Run the focused backend business-logic suite with `cd server && npm test`. It uses Node's built-in test runner through `tsx` and isolated Prisma mocks, so it does not change the development database. It covers login, authentication/authorization rejection, initial-stock movements, draft/confirmation stock behavior, OUT movements, insufficient-stock atomicity, challan snapshots, and invalid state transitions. Manual/live API QA has also covered Prisma validation/generation and migration status; backend and frontend production builds; CRM, product/inventory, dashboard, and challan API flows.
+## Assumptions and limitations
 
-## 22. Known Limitations
-
-- The automated suite is focused on critical backend business logic; there are no browser/UI or database-integration tests.
-- No password reset, user-management, or token refresh endpoint.
-- No product deletion endpoint or inventory movement reversal workflow.
-- Challan numbers use a date plus random suffix rather than a sequential database counter.
-- No OpenAPI specification is included; the Postman collection and this README are the API documentation.
-
-## 23. Future Improvements
-
-- Add automated API and browser tests.
-- Add an OpenAPI specification.
-- Add user administration and password-reset workflows.
-- Add pagination/search controls to the stock-movement ledger where needed by operations.
+- Customer deletion may be blocked by database foreign-key relationships when a customer has challans; there is no archival workflow.
+- There is no user-management UI, password reset, token refresh, or product deletion endpoint.
+- No inventory reversal workflow exists for confirmed challans or manual movements.
+- Challan numbers use a date plus random four-digit suffix with up to five application-level collision retries, not a sequential database counter.
+- Automated tests are focused unit/service-level coverage; browser UI tests and live database integration tests are not included.
+- No OpenAPI specification is provided; this README and the Postman collection are the API reference.
