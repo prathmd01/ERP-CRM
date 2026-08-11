@@ -1,0 +1,150 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  ADMIN
+  SALES
+  WAREHOUSE
+  ACCOUNTS
+}
+
+enum CustomerType {
+  RETAIL
+  WHOLESALE
+  DISTRIBUTOR
+}
+
+enum CustomerStatus {
+  LEAD
+  ACTIVE
+  INACTIVE
+}
+
+enum MovementType {
+  IN
+  OUT
+}
+
+enum ChallanStatus {
+  DRAFT
+  CONFIRMED
+  CANCELLED
+}
+
+model User {
+  id           String   @id @default(cuid())
+  name         String
+  email        String   @unique
+  passwordHash String
+  role         Role
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  stockMovements StockMovement[]
+  challans       Challan[]
+
+  @@index([email])
+  @@index([role])
+}
+
+model Customer {
+  id           String         @id @default(cuid())
+  name         String
+  mobile       String
+  email        String
+  businessName String
+  gstNumber    String?
+  customerType CustomerType
+  address      String
+  status       CustomerStatus @default(LEAD)
+  followUpDate DateTime?
+  notes        String         @default("")
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+
+  challans Challan[]
+
+  @@index([name])
+  @@index([mobile])
+  @@index([businessName])
+  @@index([status])
+}
+
+model Product {
+  id           String   @id @default(cuid())
+  name         String
+  sku          String   @unique
+  category     String
+  unitPrice    Decimal  @db.Decimal(10, 2)
+  currentStock Int      @default(0)
+  minimumStock Int      @default(0)
+  warehouse    String
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  stockMovements StockMovement[]
+  challanItems   ChallanItem[]
+
+  @@index([name])
+  @@index([sku])
+  @@index([category])
+}
+
+model StockMovement {
+  id           String       @id @default(cuid())
+  productId    String
+  quantity     Int
+  movementType MovementType
+  reason       String
+  createdBy    String
+  createdAt    DateTime     @default(now())
+
+  product Product @relation(fields: [productId], references: [id])
+  user    User    @relation(fields: [createdBy], references: [id])
+
+  @@index([productId])
+  @@index([createdBy])
+  @@index([createdAt])
+}
+
+model Challan {
+  id            String        @id @default(cuid())
+  challanNumber String        @unique
+  customerId    String
+  totalQuantity Int
+  status        ChallanStatus @default(DRAFT)
+  createdBy     String
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  customer Customer      @relation(fields: [customerId], references: [id])
+  user     User          @relation(fields: [createdBy], references: [id])
+  items    ChallanItem[]
+
+  @@index([challanNumber])
+  @@index([customerId])
+  @@index([status])
+  @@index([createdAt])
+}
+
+model ChallanItem {
+  id                  String  @id @default(cuid())
+  challanId           String
+  productId           String
+  productNameSnapshot String
+  skuSnapshot         String
+  unitPriceSnapshot   Decimal @db.Decimal(10, 2)
+  quantity            Int
+
+  challan Challan @relation(fields: [challanId], references: [id], onDelete: Cascade)
+  product Product @relation(fields: [productId], references: [id])
+
+  @@index([challanId])
+  @@index([productId])
+}

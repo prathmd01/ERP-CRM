@@ -1,0 +1,145 @@
+{
+  "info": {
+    "_postman_id": "d0df1ef3-27e6-4ea1-a020-ef61a651e281",
+    "name": "Fundsroom ERP",
+    "description": "Postman collection for the current Mini ERP + CRM Operations Portal API. Run Auth > Login first; its test script stores the returned JWT in the collection token variable.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:5000/api" },
+    { "key": "token", "value": "" },
+    { "key": "customerId", "value": "" },
+    { "key": "productId", "value": "" },
+    { "key": "challanId", "value": "" }
+  ],
+  "item": [
+    {
+      "name": "Health",
+      "item": [
+        {
+          "name": "Health Check",
+          "request": { "method": "GET", "url": "{{baseUrl}}/health" }
+        }
+      ]
+    },
+    {
+      "name": "Auth",
+      "item": [
+        {
+          "name": "Login",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": ["const response = pm.response.json();", "if (response.success && response.data?.token) {", "  pm.collectionVariables.set('token', response.data.token);", "}"] } }],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"email\": \"admin@erp.demo\",\n  \"password\": \"Demo@123\"\n}", "options": { "raw": { "language": "json" } } },
+            "url": "{{baseUrl}}/auth/login"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Customers",
+      "item": [
+        {
+          "name": "List Customers",
+          "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": "{{baseUrl}}/customers?page=1&limit=10" }
+        },
+        {
+          "name": "Search Customers",
+          "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": "{{baseUrl}}/customers?page=1&limit=10&search=Kumar" }
+        },
+        {
+          "name": "Get Customer by ID",
+          "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": "{{baseUrl}}/customers/{{customerId}}" }
+        },
+        {
+          "name": "Create Customer",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }, { "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"name\": \"Postman Customer\",\n  \"mobile\": \"9999999999\",\n  \"email\": \"postman.customer@example.com\",\n  \"businessName\": \"Postman Wholesale\",\n  \"gstNumber\": null,\n  \"customerType\": \"WHOLESALE\",\n  \"address\": \"Example Address\",\n  \"status\": \"LEAD\",\n  \"followUpDate\": \"2026-12-01T00:00:00.000Z\",\n  \"notes\": \"Created from Postman\"\n}", "options": { "raw": { "language": "json" } } },
+            "url": "{{baseUrl}}/customers"
+          }
+        },
+        {
+          "name": "Update Customer",
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }, { "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"status\": \"ACTIVE\",\n  \"followUpDate\": \"2026-12-15T00:00:00.000Z\",\n  \"notes\": \"Updated from Postman\"\n}", "options": { "raw": { "language": "json" } } },
+            "url": "{{baseUrl}}/customers/{{customerId}}"
+          }
+        },
+        {
+          "name": "Delete Customer",
+          "request": { "method": "DELETE", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": "{{baseUrl}}/customers/{{customerId}}" }
+        }
+      ]
+    },
+    {
+      "name": "Products",
+      "item": [
+        { "name": "List Products", "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": "{{baseUrl}}/products?page=1&limit=10" } },
+        { "name": "Get Product by ID", "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": "{{baseUrl}}/products/{{productId}}" } },
+        {
+          "name": "Create Product",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }, { "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"name\": \"Postman Product\",\n  \"sku\": \"POSTMAN-UNIQUE-001\",\n  \"category\": \"Testing\",\n  \"unitPrice\": 100,\n  \"currentStock\": 10,\n  \"minimumStock\": 2,\n  \"warehouse\": \"WH-A\"\n}", "options": { "raw": { "language": "json" } } },
+            "url": "{{baseUrl}}/products"
+          }
+        },
+        {
+          "name": "Update Product",
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }, { "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"name\": \"Updated Product Name\",\n  \"category\": \"Testing\",\n  \"unitPrice\": 125,\n  \"minimumStock\": 3,\n  \"warehouse\": \"WH-B\"\n}", "options": { "raw": { "language": "json" } } },
+            "url": "{{baseUrl}}/products/{{productId}}"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Inventory",
+      "item": [
+        { "name": "List Inventory", "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": "{{baseUrl}}/inventory?page=1&limit=10" } },
+        { "name": "List Stock Movements", "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": "{{baseUrl}}/inventory/movements?page=1&limit=10" } },
+        {
+          "name": "Create Stock Movement",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }, { "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"productId\": \"{{productId}}\",\n  \"quantity\": 1,\n  \"movementType\": \"IN\",\n  \"reason\": \"Postman inventory adjustment\"\n}", "options": { "raw": { "language": "json" } } },
+            "url": "{{baseUrl}}/inventory/movements"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Challans",
+      "item": [
+        { "name": "List Challans", "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": "{{baseUrl}}/challans?page=1&limit=10" } },
+        { "name": "Get Challan by ID", "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": "{{baseUrl}}/challans/{{challanId}}" } },
+        {
+          "name": "Create Draft Challan",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }, { "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"customerId\": \"{{customerId}}\",\n  \"items\": [\n    { \"productId\": \"{{productId}}\", \"quantity\": 1 }\n  ]\n}", "options": { "raw": { "language": "json" } } },
+            "url": "{{baseUrl}}/challans"
+          }
+        },
+        { "name": "Confirm Challan", "request": { "method": "POST", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": "{{baseUrl}}/challans/{{challanId}}/confirm" } },
+        { "name": "Cancel Challan", "request": { "method": "POST", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": "{{baseUrl}}/challans/{{challanId}}/cancel" } }
+      ]
+    },
+    {
+      "name": "Dashboard",
+      "item": [
+        { "name": "Get Dashboard Stats", "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": "{{baseUrl}}/dashboard" } }
+      ]
+    }
+  ]
+}
